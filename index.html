@@ -1,0 +1,21 @@
+<!doctype html>
+<meta charset="utf-8" />
+<script type="importmap">
+	{
+		"imports": {
+			"lit-html": "https://esm.sh/lit-html@3",
+			"lit-html/": "https://esm.sh/lit-html@3/"
+		}
+	}
+</script>
+<script>
+	{
+		const { promise, resolve } = Promise.withResolvers()
+		window.onYouTubeIframeAPIReady = resolve
+		window.ytAPIReady = promise
+	}
+</script>
+<script src="https://www.youtube.com/iframe_api" async></script>
+<script type="module" src="main.js"></script>
+
+<div id="root"></div>
