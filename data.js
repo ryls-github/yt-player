@@ -44,23 +44,58 @@
 
 import { loadLocalStorage, saveLocalStorage, parseXSV } from "./util.js"
 
-const loadExternalScript = async (url) => {
-	if (!confirm("外部スクリプトを実行しますか？")) {
-		return
-	}
+export const loadExternalScript = async (url) => {
 	const { promise, resolve, reject } = Promise.withResolvers()
-	const script = document.createElement("script")
-	const cbName = "cb" + Math.random().slice(2).toString(36)
-	window[cbName] = (data) => {
-		delete window[cbName]
-		resolve(data)
+
+	const iframe = document.createElement("iframe")
+	iframe.setAttribute("sandbox", "allow-scripts")
+	iframe.hidden = true
+
+	const cleanup = () => {
+		clearTimeout(timerId)
+		window.removeEventListener("message", onMessage)
+		iframe.remove()
 	}
-	url.searchParams.set("cb", cbName)
-	script.src = url
-	document.head.append(script)
-	setTimeout(() => {
-		reject("TIMEOUT EXTERNAL SCRIPT: " + url.href)
+
+	const onMessage = (event) => {
+		if (event.source !== iframe.contentWindow || !event.data) return
+
+		cleanup()
+		if (event.data.error) {
+			reject(new Error(event.data.error || "EXTERNAL SCRIPT ERROR: " + url.href))
+			return
+		}
+		resolve(event.data)
+	}
+
+	const timerId = setTimeout(() => {
+		cleanup()
+		reject(new Error("TIMEOUT EXTERNAL SCRIPT: " + url.href))
 	}, 3000)
+
+	window.addEventListener("message", onMessage)
+
+	const safeJson = (value) => JSON.stringify(value).replace(/</g, "\\u003c")
+	iframe.srcdoc = `
+		<!doctype html>
+		<script type="module">
+			const send = (payload) => {
+				try {
+					parent.postMessage(payload, "*")
+				} catch (err) {
+					parent.postMessage({ error: err.message }, "*")
+				}
+			}
+
+			window.cb = send
+			const s = document.createElement("script")
+			s.src = ${safeJson(url.href)}
+			s.onerror = () => send({ error: "LOAD FAILED: " + s.src })
+			document.head.append(s)
+		</script>
+	`
+
+	document.body.append(iframe)
 	return promise
 }
 
